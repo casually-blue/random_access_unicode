@@ -43,7 +43,7 @@ impl MappedFile {
 
             // if we do, we can locate it in a line
             if last.char_position < index && index <= current.char_position {
-                return self.get_unicode_char(last.byte_position, index - last.char_position, current.byte_position);
+                return self.get_unicode_char_in_line(last.byte_position, index - last.char_position, current.byte_position);
             }
         }
 
@@ -79,7 +79,7 @@ impl MappedFile {
         Err(IndexError::OutOfBounds)
     }
 
-    pub fn get_unicode_char(&self, byte_position: usize, index: usize, next_line_byte_position: usize) -> Result<char, IndexError> {
+    fn get_unicode_char_in_line(&self, byte_position: usize, index: usize, next_line_byte_position: usize) -> Result<char, IndexError> {
         // Get the current line as a slice
         let slice = &self.map[byte_position..next_line_byte_position];
 
