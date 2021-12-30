@@ -1,5 +1,6 @@
 [package]
 name = "random_access_unicode"
+description = "Provide random access to the unicode characters in a file"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
