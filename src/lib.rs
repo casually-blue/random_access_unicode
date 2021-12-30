@@ -7,38 +7,48 @@ use {
 };
 
 #[derive(Clone, Copy, Debug)]
+/// The position of a character in a file as both a character index and a byte index of the start of the character.
 pub struct CharPosition {
+    // The position of the character in bytes
     pub byte_position: usize,
+    // The position of the character in utf8 characters
     pub char_position: usize,
 }
 
 /// A Memory Mapped File
 pub struct MappedFile {
+    /// The file that the memory map is mapped to
     pub file: File,
+    /// The memory map of the file
     pub map: Mmap,
-    pub line_ending_indexes: Vec<CharPosition>,
+
+    /// The cache of line ending positions
+    pub line_ending_positions: Vec<CharPosition>,
 }
 
 #[derive(Debug)]
 pub enum IndexError {
+    /// The index is outside of the bounds of the file
     OutOfBounds,
+    /// The index is not a valid utf8 character
     InvalidChar(Utf8Error),
 }
 
 impl MappedFile {
+    /// Creates a new MappedFile from a File
+    /// possibly returning an error
     pub fn new(file: File) -> Result<MappedFile, String> {
         let map = unsafe { MmapOptions::new().map(&file).map_err(|e| e.to_string())? };
-        Ok(MappedFile { file, map, line_ending_indexes: vec![CharPosition {char_position: 0, byte_position: 0}] })
+        Ok(MappedFile { file, map, line_ending_positions: vec![CharPosition {char_position: 0, byte_position: 0}] })
     }
 
     /// Returns the index of the line ending at the given byte position.
     /// Returns an error if the byte position is out of bounds.
-
     pub fn unicode_at(&mut self, index: usize) -> Result<char, IndexError> {
         let index= index + 1;
 
         // Check through to see if we have something close to the index in the line cache
-        for window in self.line_ending_indexes.windows(2) {
+        for window in self.line_ending_positions.windows(2) {
             let (last, current) = (window[0], window[1]);
 
             // if we do, we can locate it in a line
@@ -48,7 +58,7 @@ impl MappedFile {
         }
 
         // We don't have the closest line, so we need to go through the file until we find the index
-        if let Some(current) = self.line_ending_indexes.last() {
+        if let Some(current) = self.line_ending_positions.last() {
             // Parse the file to utf8
             let temp_str = std::str::from_utf8(&self.map[current.byte_position..]).unwrap();
 
@@ -65,7 +75,7 @@ impl MappedFile {
 
                 // if we have a newline we need to update the line ending indexes
                 if c == '\n' {
-                    self.line_ending_indexes.push(CharPosition { byte_position: byte_index, char_position: char_index });
+                    self.line_ending_positions.push(CharPosition { byte_position: byte_index, char_position: char_index });
                 }
 
                 // if we have found the index, return the char
@@ -79,6 +89,7 @@ impl MappedFile {
         Err(IndexError::OutOfBounds)
     }
 
+    /// Gets the char at the given index in the given line
     fn get_unicode_char_in_line(&self, byte_position: usize, index: usize, next_line_byte_position: usize) -> Result<char, IndexError> {
         // Get the current line as a slice
         let slice = &self.map[byte_position..next_line_byte_position];
