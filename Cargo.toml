@@ -1,0 +1,12 @@
+[package]
+name = "random_access_unicode"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+
+author = "Thomas Terry <darkforestsilence@gmail.com>"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+memmap = "0.7"
