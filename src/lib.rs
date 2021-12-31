@@ -39,6 +39,8 @@ impl MappedFile {
         Ok(MappedFile {
             file,
             map,
+            // First line ending is the start of the file
+            // Mainly so I can just get the last element regardless of whether i have encountered any line endings yet
             line_ending_positions: vec![CharPosition {
                 char_position: 0,
                 byte_position: 0,
@@ -46,49 +48,66 @@ impl MappedFile {
         })
     }
 
-    fn find_with_cache(&self, index: usize) -> Option<char> {
+    fn find_with_cache(&mut self, index: usize) -> Result<char, IndexError> {
         for window in self.line_ending_positions.windows(2) {
             let (last, current) = (window[0], window[1]);
 
-            // if we do, we can locate it in a line
+            // Check if the index is in the current window
             if last.char_position < index && index <= current.char_position {
-                return match self.get_unicode_char_in_line(
-                    last.byte_position,
+                // If it is, we locate it in the map
+                return self.find_nth_in_str(
                     index - last.char_position,
-                    current.byte_position,
-                ) {
-                    Ok(c) => Some(c),
-                    Err(_) => None,
-                };
+                    last,
+                    Some(current),
+                );
             }
         }
-        None
+        
+        // If we get here, it means that the index is outside of the bounds of the line
+        Err(IndexError::OutOfBounds)
     }
 
-    fn find_nth_in_str(&mut self, n: usize, start: CharPosition) -> Option<char> {
-        let str = std::str::from_utf8(&self.map[start.byte_position..]).unwrap();
+    fn find_nth_in_str(
+        &mut self,
+        n: usize,
+        start: CharPosition,
+        end: Option<CharPosition>,
+    ) -> Result<char, IndexError> {
+        let str = match std::str::from_utf8(match end {
+            Some(end) => &self.map[start.byte_position..end.byte_position],
+            None => &self.map[start.byte_position..],
+        }) {
+            Ok(s) => s,
+            Err(e) => return Err(IndexError::InvalidChar(e)),
+        };
 
-        let mut byte_position = start.byte_position;
-        for (char_index, c) in str.chars().enumerate() {
-            // update the positions
-            byte_position += c.len_utf8();
+        // If we know we're inside a line, we can just get the nth character
+        if let Some(_) = end {
+            Ok(str.chars().nth(n).unwrap())
+        // Otherwise we have to iterate and update the cache
+        } else {
+            let mut byte_position = start.byte_position;
+            for (char_index, c) in str.chars().enumerate() {
+                // update the positions
+                byte_position += c.len_utf8();
 
-            // if we have a newline we need to update the line ending indexes
-            if c == '\n' {
-                self.line_ending_positions.push(CharPosition {
-                    byte_position: byte_position,
-                    char_position: char_index + start.char_position,
-                });
+                // if we have a newline we need to update the line ending indexes
+                if c == '\n' {
+                    self.line_ending_positions.push(CharPosition {
+                        byte_position: byte_position,
+                        char_position: char_index + start.char_position,
+                    });
+                }
+
+                // if we have found the index, return the char
+                if char_index == n {
+                    return Ok(c);
+                }
             }
 
-            // if we have found the index, return the char
-            if char_index == n {
-                return Some(c);
-            }
+            // if we get here, we didn't find the index
+            Err(IndexError::OutOfBounds)
         }
-
-        // if we get here, we didn't find the index
-        None
     }
 
     /// Returns the index of the line ending at the given byte position.
@@ -97,44 +116,12 @@ impl MappedFile {
         let index = index + 1;
 
         // Check through to see if we have something close to the index in the line cache
-        if let Some(c) = self.find_with_cache(index) {
+        if let Ok(c) = self.find_with_cache(index) {
             return Ok(c);
         } else {
-            match self.line_ending_positions.last().cloned() {
-                Some(current) => {
-                    // Go through the file until we find the index
-                    match self.find_nth_in_str(index - current.char_position, current) {
-                        Some(c) => Ok(c),
-                        None => Err(IndexError::OutOfBounds),
-                    }
-                },
-                None => Err(IndexError::OutOfBounds),
-            }
-        }
-    }
-
-    /// Gets the char at the given index in the given line
-    fn get_unicode_char_in_line(
-        &self,
-        byte_position: usize,
-        index: usize,
-        next_line_byte_position: usize,
-    ) -> Result<char, IndexError> {
-        // Get the current line as a slice
-        let slice = &self.map[byte_position..next_line_byte_position];
-
-        // Parse the slice as utf8
-        let temp_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            // If the slice isn't valid utf8, return an error
-            Err(err) => return Err(IndexError::InvalidChar(err)),
-        };
-
-        // Get the char at the index
-        match temp_str.chars().nth(index) {
-            Some(c) => Ok(c),
-            // If the index is out of bounds, return an error
-            None => Err(IndexError::OutOfBounds),
+            let current = self.line_ending_positions.last().cloned().unwrap();
+            // Go through the file until we find the index
+            self.find_nth_in_str(index - current.char_position, current, None)
         }
     }
 }
