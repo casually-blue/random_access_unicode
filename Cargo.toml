@@ -1,7 +1,7 @@
 [package]
 name = "random_access_unicode"
 description = "Provide random access to the unicode characters in a file"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 license = "GPL-3.0"
 repository = "https://github.com/casually-blue/random_access_unicode"
