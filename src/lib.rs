@@ -88,9 +88,6 @@ impl MappedFile {
         } else {
             let mut byte_position = start.byte_position;
             for (char_index, c) in str.chars().enumerate() {
-                // update the positions
-                byte_position += c.len_utf8();
-
                 // if we have a newline we need to update the line ending indexes
                 if c == '\n' {
                     self.line_ending_positions.push(CharPosition {
@@ -103,6 +100,9 @@ impl MappedFile {
                 if char_index == n {
                     return Ok(c);
                 }
+
+                // update the positions
+                byte_position += c.len_utf8();
             }
 
             // if we get here, we didn't find the index
@@ -113,8 +113,6 @@ impl MappedFile {
     /// Returns the index of the line ending at the given byte position.
     /// Returns an error if the byte position is out of bounds.
     pub fn unicode_at(&mut self, index: usize) -> Result<char, IndexError> {
-        let index = index + 1;
-
         // Check through to see if we have something close to the index in the line cache
         if let Ok(c) = self.find_with_cache(index) {
             return Ok(c);
